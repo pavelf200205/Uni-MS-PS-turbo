@@ -26,7 +26,7 @@ class Transformer_8(nn.Module):
                  num_stages = 4,
                  eval_mode=False,
                  use_cuda_eval_mode=False,
-                 batch_size_encoder=4,
+                 batch_size_encoder=16,
                  batch_size_transformer=20000):
         
         super(Transformer_8, self).__init__()
@@ -161,28 +161,19 @@ class Transformer_8(nn.Module):
         
         
         if self.eval_mode:
-            if self.use_cuda_eval_mode:
-                patch_embed = patch_embed.cuda()
-            x1 = torch.Tensor()
+            out = None
             
             index_batch = 0
             batch_size = self.batch_size_encoder
-            #pbar = tqdm(total=x.shape[0])
             while index_batch<x.shape[0]:
                 x2 = x[index_batch:(index_batch+batch_size)]
-                if self.use_cuda_eval_mode:
-                    x2 = x2.cuda()
-                    
                 x2, H1, W1 = patch_embed(x2)
-                if self.use_cuda_eval_mode:
-                    x2 = x2.cpu()
-                
-                x1 = torch.cat((x1, x2), 0)
+                if out is None:
+                    out = torch.empty((x.shape[0],) + x2.shape[1:], dtype=x2.dtype, device=x2.device)
+                out[index_batch:index_batch+x2.shape[0]] = x2
                 index_batch+=batch_size
                 
-            x = x1
-            if self.use_cuda_eval_mode:
-                patch_embed = patch_embed.cpu()
+            x = out
         else:
             x = x.to(next(patch_embed.parameters()).device)
             x, H1, W1 = patch_embed(x)
@@ -194,27 +185,18 @@ class Transformer_8(nn.Module):
             patch_embed = patch_embed.cpu()
         for blk in block:
             if self.eval_mode:                    
-                if self.use_cuda_eval_mode:
-                    blk = blk.cuda()
-                x1 = torch.Tensor()
-                
+                out = None
                 index_batch = 0
                 batch_size = self.batch_size_encoder
-                #pbar = tqdm(total=x.shape[0])
                 while index_batch<x.shape[0]:
                     x2 = x[index_batch:(index_batch+batch_size)]
-                    if self.use_cuda_eval_mode:
-                        x2 = x2.cuda()
                     x2 = blk(x2, H1, W1)
-                    if self.use_cuda_eval_mode:
-                        x2 = x2.cpu()
-                        
-                    x1 = torch.cat((x1, x2), 0)
+                    if out is None:
+                        out = torch.empty((x.shape[0],) + x2.shape[1:], dtype=x2.dtype, device=x2.device)
+                    out[index_batch:index_batch+x2.shape[0]] = x2
                     index_batch+=batch_size
                     
-                x = x1
-                if self.use_cuda_eval_mode:
-                    blk = blk.cpu()
+                x = out
                     
             else:
                 x = x.to(next(blk.parameters()).device)
@@ -296,9 +278,6 @@ class Transformer_8(nn.Module):
                                      x_pool=pools[i+1])
         x = self.output_block(x)            
         normal = nn.functional.normalize(x, 2, 1)
-        
-        normal = normal.to(self.last_device)
-        mask = mask.to(self.last_device)
         
         pred = {}
         pred['n'] = normal.masked_fill(mask, 0) 

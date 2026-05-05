@@ -117,27 +117,18 @@ class TransformerLayer(nn.Module):
         
     def forward(self, x):
         if self.eval_mode:
-            if self.use_cuda_eval_mode:
-                self.enc = self.enc.cuda()
-            x1 = torch.Tensor()
+            out = None
             index = 0
             batch_size = self.eval_mode_batch_size
             
             while index<x.shape[0]:
                 x2 = x[index:(index+batch_size)]
-                if self.use_cuda_eval_mode:
-                    x2 = x2.cuda()
-                        
                 x2 = self.enc(x2)
-                if self.use_cuda_eval_mode:
-                    x2 = x2.cpu()
-                        
-                x1 = torch.cat((x1, x2), 0)
-                    
+                if out is None:
+                    out = torch.empty((x.shape[0],) + x2.shape[1:], dtype=x2.dtype, device=x2.device)
+                out[index:index+x2.shape[0]] = x2
                 index+=batch_size
-            x = x1
-            if self.use_cuda_eval_mode:
-                self.enc = self.enc.cpu()
+            x = out
         else:
             x = self.enc(x)
         return x
@@ -178,31 +169,19 @@ class TransformerLayer_pooling(nn.Module):
 
     def forward(self, x):
         if self.eval_mode:
-            if self.use_cuda_eval_mode:
-                self.enc = self.enc.cuda()
-                self.dec = self.dec.cuda()
-            x1 = torch.Tensor()
+            out = None
             index = 0
             batch_size = self.eval_mode_batch_size
-            #pbar = tqdm(total=x.shape[0])
             while index<x.shape[0]:
                 x2 = x[index:(index+batch_size)]
-                if self.use_cuda_eval_mode:
-                    x2 = x2.cuda()
-    
                 x2 = self.enc(x2)
                 x2 = self.dec(x2)
-                    
-                if self.use_cuda_eval_mode:
-                    x2 = x2.cpu()
-                        
-                x1 = torch.cat((x1, x2), 0)
+                if out is None:
+                    out = torch.empty((x.shape[0],) + x2.shape[1:], dtype=x2.dtype, device=x2.device)
+                out[index:index+x2.shape[0]] = x2
                 index+=batch_size
 
-            x = x1
-            if self.use_cuda_eval_mode:
-                self.enc = self.enc.cpu()
-                self.dec = self.dec.cpu()
+            x = out
         else:
             x = self.enc(x)
             x = self.dec(x)

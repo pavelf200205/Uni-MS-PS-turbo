@@ -4,6 +4,7 @@ import os
 import torch
 import cv2
 from Transformer_multi_res_7 import Transformer_multi_res_7
+from torch.amp import autocast
 
 
 
@@ -211,22 +212,28 @@ def load_imgs_mask(path,
 
 def load_model(path_weight, cuda,
                calibrated, mode_inference=False): 
+    
+    if cuda:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
     if calibrated:
         file_weight = os.path.join(path_weight, "model_calibrated.pth")
     else:
         file_weight = os.path.join(path_weight, "model_uncalibrated.pth")
     
     if calibrated:
-        model = Transformer_multi_res_7(c_in=6)
+        model = Transformer_multi_res_7(c_in=6, batch_size_encoder=8, batch_size_transformer=5000)
     else:
-        model = Transformer_multi_res_7(c_in=3)
+        model = Transformer_multi_res_7(c_in=3, batch_size_encoder=8, batch_size_transformer=5000)
         
     model.load_weights(file=file_weight)
+    
+    if cuda:
+        model.cuda()
+        
     model.eval()
     if mode_inference:
-        model.set_inference_mode(use_cuda_eval_mode=cuda)
-    elif cuda:
-        model.cuda()
+        model.set_inference_mode(use_cuda_eval_mode=False)
     return model
 
 
@@ -237,8 +244,9 @@ def process_normal(model, imgs, mask):
     x["mask"] = mask
 
     with torch.no_grad():
-        a = model.process(x,
-                          nb_stage)
-        normal = a["n"].squeeze().movedim(0,-1).numpy()
+        with autocast(device_type="cuda"):
+            a = model.process(x,
+                              nb_stage)
+        normal = a["n"].squeeze().movedim(0,-1).cpu().float().numpy()
     return normal
         

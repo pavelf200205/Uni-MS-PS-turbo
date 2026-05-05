@@ -5,6 +5,7 @@ import scipy.io
 import numpy as np
 from utils import depadding, normal_to_rgb
 from utils import load_imgs_mask, process_normal
+import pyexr
 
 
 def run(model, path_obj, nb_img, folder_save, obj_name, calibrated):
@@ -45,3 +46,5 @@ def run(model, path_obj, nb_img, folder_save, obj_name, calibrated):
         
     scipy.io.savemat(os.path.join(folder_save, "{}.mat".format(obj_name)),
                      {'Normal_est': normal_resize})
+    pyexr.write(os.path.join(folder_save, "{}.exr".format(obj_name)),
+                normal_resize)  
